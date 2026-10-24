@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { API_BASE } from '../utils/apiConfig';
 import { Mail, Send, CheckCircle2, Phone, MapPin, Sparkles, MessageSquare } from 'lucide-react';
 
 export default function ContactPage() {
@@ -35,7 +36,7 @@ export default function ContactPage() {
     setErrorMsg('');
 
     try {
-      const res = await fetch('/api/contact', {
+      const res = await fetch(`${API_BASE}/api/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

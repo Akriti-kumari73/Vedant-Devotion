@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { API_BASE } from '../utils/apiConfig';
 import { Shield, Lock, User, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
@@ -18,7 +19,7 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

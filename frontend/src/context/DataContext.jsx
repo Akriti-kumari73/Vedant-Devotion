@@ -7,6 +7,7 @@ import React, {
   useRef
 } from 'react';
 import { defaultBhajans, defaultVideos } from '../data/fallbackData';
+import { API_BASE } from '../utils/apiConfig';
 
 const DataContext = createContext();
 
@@ -41,7 +42,7 @@ export function DataProvider({ children }) {
   // Fetch Bhajans
   const fetchBhajans = useCallback(async () => {
     try {
-      const res = await fetch('/api/bhajans');
+      const res = await fetch(`${API_BASE}/api/bhajans`);
       if (!res.ok) throw new Error(`Bhajans API failed: ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -64,7 +65,7 @@ export function DataProvider({ children }) {
   // Fetch Videos
   const fetchVideos = useCallback(async () => {
     try {
-      const res = await fetch('/api/videos');
+      const res = await fetch(`${API_BASE}/api/videos`);
       if (!res.ok) throw new Error(`Videos API failed: ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -190,7 +191,7 @@ export function DataProvider({ children }) {
   const addVideo = async (videoData) => {
     try {
       const token = localStorage.getItem('admin-token');
-      const res = await fetch('/api/videos', {
+      const res = await fetch(`${API_BASE}/api/videos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -213,7 +214,7 @@ export function DataProvider({ children }) {
   const deleteVideo = async (id) => {
     try {
       const token = localStorage.getItem('admin-token');
-      const res = await fetch(`/api/videos/${id}`, {
+      const res = await fetch(`${API_BASE}/api/videos/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -235,7 +236,7 @@ export function DataProvider({ children }) {
       const token = localStorage.getItem('admin-token');
       const formData = new FormData();
       formData.append('audio', file);
-      const res = await fetch('/api/bhajans/upload', {
+      const res = await fetch(`${API_BASE}/api/bhajans/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
@@ -255,7 +256,7 @@ export function DataProvider({ children }) {
   const addBhajan = async (bhajanData) => {
     try {
       const token = localStorage.getItem('admin-token');
-      const res = await fetch('/api/bhajans/add', {
+      const res = await fetch(`${API_BASE}/api/bhajans/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -278,7 +279,7 @@ export function DataProvider({ children }) {
   const deleteBhajan = async (id) => {
     try {
       const token = localStorage.getItem('admin-token');
-      const res = await fetch(`/api/bhajans/${id}`, {
+      const res = await fetch(`${API_BASE}/api/bhajans/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
