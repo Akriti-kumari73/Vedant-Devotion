@@ -6,13 +6,22 @@ import React, {
   useCallback,
   useRef
 } from 'react';
+import { defaultBhajans, defaultVideos } from '../data/fallbackData';
 
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
-  const [videos, setVideos] = useState([]);
-  const [bhajans, setBhajans] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [videos, setVideos] = useState(defaultVideos);
+  const [bhajans, setBhajans] = useState(() =>
+    defaultBhajans.map((item) => ({
+      ...item,
+      artist: item.singer || item.artist || 'Traditional',
+      url: item.audio_url?.startsWith('http')
+        ? item.audio_url
+        : `${window.location.origin}${item.audio_url}`
+    }))
+  );
+  const [loading, setLoading] = useState(false);
   const [dataErrors, setDataErrors] = useState({ videos: null, bhajans: null });
 
   // --- Global Audio Player State ---
@@ -35,21 +44,20 @@ export function DataProvider({ children }) {
       const res = await fetch('/api/bhajans');
       if (!res.ok) throw new Error(`Bhajans API failed: ${res.status}`);
       const data = await res.json();
-      const mapped = data.map((item) => ({
-        ...item,
-        artist: item.singer || item.artist || 'Traditional',
-        url: item.audio_url?.startsWith('http')
-          ? item.audio_url
-          : `${window.location.origin}${item.audio_url}`
-      }));
-      setBhajans(mapped);
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map((item) => ({
+          ...item,
+          artist: item.singer || item.artist || 'Traditional',
+          url: item.audio_url?.startsWith('http')
+            ? item.audio_url
+            : `${window.location.origin}${item.audio_url}`
+        }));
+        setBhajans(mapped);
+      }
       setDataErrors((prev) => ({ ...prev, bhajans: null }));
     } catch (err) {
-      console.error('Error fetching bhajans:', err);
-      setDataErrors((prev) => ({
-        ...prev,
-        bhajans: { statusCode: 500, message: err.message }
-      }));
+      // Quietly preserve pre-bundled sacred bhajans
+      console.warn('API bhajans not reachable, using bundled sacred tracks:', err.message);
     }
   }, []);
 
@@ -59,14 +67,13 @@ export function DataProvider({ children }) {
       const res = await fetch('/api/videos');
       if (!res.ok) throw new Error(`Videos API failed: ${res.status}`);
       const data = await res.json();
-      setVideos(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setVideos(data);
+      }
       setDataErrors((prev) => ({ ...prev, videos: null }));
     } catch (err) {
-      console.error('Error fetching videos:', err);
-      setDataErrors((prev) => ({
-        ...prev,
-        videos: { statusCode: 500, message: err.message }
-      }));
+      // Quietly preserve pre-bundled sacred videos
+      console.warn('API videos not reachable, using bundled sacred videos:', err.message);
     }
   }, []);
 
