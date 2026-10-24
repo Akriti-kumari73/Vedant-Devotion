@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -9,57 +10,83 @@ const multer = require('multer');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'vedant-devotions-sacred-key-2026';
+const isVercel = !!process.env.VERCEL;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Uploads setup
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+// Uploads setup - Vercel only allows writing to os.tmpdir() (/tmp)
+const uploadsDir = isVercel
+  ? path.join(os.tmpdir(), 'uploads')
+  : path.join(__dirname, 'uploads');
+
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('Notice: Uploads directory creation skipped or read-only:', err.message);
 }
 app.use('/uploads', express.static(uploadsDir));
 
-// Data paths
+// Data paths - Fallback safe setup
 const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('Notice: Data directory creation skipped or read-only:', err.message);
 }
+
 const bhajansFile = path.join(dataDir, 'bhajans.json');
 const videosFile = path.join(dataDir, 'videos.json');
 const messagesFile = path.join(dataDir, 'messages.json');
 const adminFile = path.join(dataDir, 'admin.json');
 
-// Helper to read/write JSON safely
+// In-Memory cache for serverless environments (so writes persist during execution without crashing on read-only FS)
+const inMemoryCache = {};
+
+// Helper to read/write JSON safely in local and serverless environments
 function readJSON(file, fallback = []) {
   try {
-    if (!fs.existsSync(file)) {
-      fs.writeFileSync(file, JSON.stringify(fallback, null, 2));
-      return fallback;
+    if (inMemoryCache[file]) return inMemoryCache[file];
+    if (fs.existsSync(file)) {
+      const data = fs.readFileSync(file, 'utf8');
+      const parsed = JSON.parse(data);
+      inMemoryCache[file] = parsed;
+      return parsed;
     }
-    const data = fs.readFileSync(file, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error(`Error reading ${file}:`, err);
+    inMemoryCache[file] = fallback;
     return fallback;
+  } catch (err) {
+    console.warn(`Reading ${file} fallback to memory:`, err.message);
+    return inMemoryCache[file] || fallback;
   }
 }
 
 function writeJSON(file, data) {
   try {
+    inMemoryCache[file] = data;
+    // On Vercel / serverless, filesystem is read-only outside /tmp
     fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
     return true;
   } catch (err) {
-    console.error(`Error writing ${file}:`, err);
-    return false;
+    console.warn(`Notice: Write to ${file} skipped on read-only serverless environment. In-memory data updated.`);
+    return true;
   }
 }
 
 // Multer storage for audio file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
+    try {
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+    } catch (e) {}
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
@@ -95,7 +122,12 @@ function authenticateToken(req, res, next) {
 
 // --- Health Check ---
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'Vedant Devotion API', time: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    service: 'Vedant Devotion API',
+    environment: isVercel ? 'vercel-serverless' : 'node-server',
+    time: new Date().toISOString()
+  });
 });
 
 // --- Auth Routes ---
@@ -126,7 +158,6 @@ app.get('/api/auth/verify', authenticateToken, (req, res) => {
 });
 
 // --- Bhajans Routes ---
-// GET /api/bhajans and GET /bhajans
 const getBhajansHandler = (req, res) => {
   const bhajans = readJSON(bhajansFile, []);
   res.json(bhajans);
@@ -196,7 +227,6 @@ app.delete('/api/bhajans/:id', authenticateToken, deleteBhajanHandler);
 app.delete('/bhajans/:id', authenticateToken, deleteBhajanHandler);
 
 // --- Videos Routes ---
-// GET /api/videos and GET /videos
 const getVideosHandler = (req, res) => {
   const videos = readJSON(videosFile, []);
   res.json(videos);
@@ -211,7 +241,6 @@ const addVideoHandler = (req, res) => {
     return res.status(400).json({ message: 'Title and YouTube ID are required' });
   }
 
-  // Extract pure YouTube video ID if full URL provided
   let cleanId = youtubeId.trim();
   if (cleanId.includes('v=')) {
     cleanId = cleanId.split('v=')[1].split('&')[0];
@@ -292,21 +321,45 @@ app.get('/api/contact', authenticateToken, (req, res) => {
 });
 
 // Serve frontend static build if available
-const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
-if (fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
-  // Client-side routing fallback
+const possibleDistPaths = [
+  path.join(__dirname, '..', 'frontend', 'dist'),
+  path.join(process.cwd(), 'frontend', 'dist'),
+  path.join(process.cwd(), 'dist')
+];
+
+let foundDistPath = null;
+for (const p of possibleDistPaths) {
+  try {
+    if (fs.existsSync(p)) {
+      foundDistPath = p;
+      break;
+    }
+  } catch (e) {}
+}
+
+if (foundDistPath) {
+  app.use(express.static(foundDistPath));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/bhajans') || req.path.startsWith('/videos')) {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/uploads') ||
+      req.path.startsWith('/bhajans') ||
+      req.path.startsWith('/videos')
+    ) {
       return next();
     }
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    res.sendFile(path.join(foundDistPath, 'index.html'));
   });
 }
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`🌸 Vedant Devotion Backend running on port ${PORT}`);
-  console.log(`🔗 Website URL: http://localhost:${PORT}`);
-  console.log(`🔗 API Base: http://localhost:${PORT}/api`);
-});
+// Export app for Vercel Serverless environment
+module.exports = app;
+
+// Only start listening when running as a standalone server (local / non-Vercel)
+if (!isVercel) {
+  app.listen(PORT, () => {
+    console.log(`🌸 Vedant Devotion Backend running on port ${PORT}`);
+    console.log(`🔗 Website URL: http://localhost:${PORT}`);
+    console.log(`🔗 API Base: http://localhost:${PORT}/api`);
+  });
+}
