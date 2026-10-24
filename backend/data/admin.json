@@ -1,0 +1,9 @@
+{
+  "users": [
+    {
+      "id": "admin-1",
+      "username": "admin",
+      "passwordHash": "$2a$10$vI8aWBnW3fID.ZQ4/zo1G.qH0vG0lF8UqQ0U8iU1tW3A8E0ZfS4d2"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "vedant-devotions-fullstack",
+  "version": "1.0.0",
+  "description": "Vedant Devotions - Spiritual Peace & Devotional Bhajans (Fullstack React.js + Node.js)",
+  "scripts": {
+    "start": "node backend/server.js",
+    "backend": "cd backend && node server.js",
+    "frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "install-all": "npm run install-backend && npm run install-frontend"
+  },
+  "keywords": [
+    "vedant-devotions",
+    "sanatan-dharma",
+    "bhajans",
+    "react",
+    "node"
+  ],
+  "author": "Vedant Devotions",
+  "license": "ISC"
+}
